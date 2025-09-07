@@ -4,39 +4,56 @@
 <meta charset="utf-8">
 <title>ANT61 Work Log</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light dark">
+<meta name="color-scheme" content="dark light">
 <style>
   :root{
-    --bg:#0b0c10;--card:#12141a;--text:#e6eaf2;--muted:#9aa3b2;--border:#232838;
-    --accent:#4c7dff;--pill:#0e1322;--shadow:0 10px 30px rgba(0,0,0,.35);
+    --bg:#000000;          /* deep black */
+    --panel:#0b0b0b;
+    --card:#111111;
+    --text:#f6f6f6;
+    --muted:#b8b8b8;
+    --border:#1e1e1e;
+    --accent:#ffd60a;      /* ANT61 yellow */
+    --accent-weak:#ffe566;
+    --pill:#0f0f0f;
+    --shadow:0 10px 30px rgba(0,0,0,.45);
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
-  header{background:linear-gradient(180deg,#0f121a,#0b0c10);border-bottom:1px solid var(--border);padding:28px 16px;text-align:center}
-  .title{font-weight:900;letter-spacing:.3px;font-size:20px}
-  .totals{display:flex;gap:16px;align-items:baseline;justify-content:center;flex-wrap:wrap;margin-top:8px}
-  .hours{font-size:40px;font-weight:900}
-  .days{color:var(--muted);font-weight:700}
+  html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  header{
+    background:
+      radial-gradient(1000px 260px at 10% -20%, rgba(255,214,10,.15), transparent 60%),
+      linear-gradient(180deg,var(--panel), var(--bg));
+    border-bottom:1px solid var(--border); padding:28px 16px; text-align:center;
+  }
+  .title{font-weight:900; letter-spacing:.3px; font-size:20px}
+  .totals{display:flex; gap:12px; align-items:center; justify-content:center; flex-direction:column; margin-top:10px}
+  .daysBig{font-size:44px; font-weight:900; color:var(--accent); text-shadow:0 0 12px rgba(255,214,10,.18)}
+  .hoursSub{color:var(--muted); font-weight:700}
   .wrap{max-width:980px;margin:22px auto;padding:0 16px;display:grid;gap:16px}
-  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
-  h2{margin:0 0 10px 0;font-size:16px}
-  .list{display:grid;gap:10px}
-  .row{background:var(--pill);border:1px solid var(--border);border-radius:12px;padding:12px;display:flex;flex-direction:column}
-  .date{font-weight:800;font-size:14px;margin-bottom:2px}
-  .time{color:var(--muted);font-size:12px}
-  .empty{color:var(--muted);font-style:italic}
+  .card{background:var(--card); border:1px solid var(--border); border-radius:16px; padding:16px; box-shadow:var(--shadow)}
+  h2{margin:0 0 10px 0; font-size:16px}
+  .list{display:grid; gap:10px}
+  .row{background:var(--pill); border:1px solid var(--border); border-radius:12px; padding:12px; display:flex; flex-direction:column}
+  .date{font-weight:800; font-size:14px; color:#fff}
+  .time{color:var(--accent-weak); font-size:12px}
+  .empty{color:var(--muted); font-style:italic}
   .err{background:#2a0f14;border:1px solid #5b1f2a;color:#ffd6db;padding:10px;border-radius:10px}
-  button{appearance:none;border:none;background:var(--accent);color:#fff;padding:10px 14px;border-radius:12px;cursor:pointer;font-weight:800}
-  button.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
-  footer{opacity:.7;text-align:center;margin:18px 0 10px}
+  .actions{margin-top:8px}
+  .link{
+    background:transparent; border:none; padding:0; color:var(--accent);
+    font-weight:800; cursor:pointer; text-decoration:underline; text-underline-offset:3px;
+  }
+  .link:hover{color:#ffe36b}
+  footer{opacity:.7;text-align:center;margin:18px 0 10px; color:var(--muted)}
 </style>
 </head>
 <body>
 <header>
   <div class="title">ANT61 Work Log</div>
   <div class="totals">
-    <div class="hours" id="totalHours">Loading…</div>
-    <div class="days" id="totalDays"></div>
+    <div class="daysBig" id="totalDaysBig">0.00 days</div>
+    <div class="hoursSub" id="totalHoursSub">0.00 hrs (6 hrs/day)</div>
   </div>
 </header>
 
@@ -47,7 +64,7 @@
     <h2>Next 3 sessions</h2>
     <div class="list" id="next"><div class="empty">Fetching…</div></div>
     <div class="actions">
-      <button class="ghost" id="toggleFuture" disabled>Show all future sessions</button>
+      <button class="link" id="toggleFuture" disabled>Show future</button>
     </div>
   </div>
 
@@ -62,16 +79,19 @@
   </div>
 </div>
 
-<footer>Public Google Calendar API (no login). If nothing appears, check API key & calendar visibility.</footer>
+<footer>© <span id="year"></span> Joshua Chan</footer>
 
 <script>
+/* ====== CONFIG ====== */
 const API_KEY = "AIzaSyARyKqEYg8ImmnLVwXKCWAJatSN2RROlwQ";
 const CAL_ID  = "aff5e1c22d61a3b0995590917f322322f031f87485955b05af7b8160db0f5370@group.calendar.google.com";
 const TIMEZONE = "Australia/Sydney";
 
+/* ====== Formatters ====== */
 const fmtDate = new Intl.DateTimeFormat("en-AU",{timeZone:TIMEZONE,weekday:"short",day:"2-digit",month:"short",year:"numeric"});
 const fmtTime = new Intl.DateTimeFormat("en-AU",{timeZone:TIMEZONE,hour:"2-digit",minute:"2-digit",hour12:false});
 
+/* ====== Helpers ====== */
 const isWork = ev => (ev.summary||"").trim().toLowerCase()==="work";
 const evStart = ev => ev.start?.dateTime ? new Date(ev.start.dateTime) : (ev.start?.date ? new Date(ev.start.date) : null);
 const evEnd   = ev => ev.end?.dateTime   ? new Date(ev.end.dateTime)   : (ev.end?.date   ? new Date(ev.end.date)   : null);
@@ -86,6 +106,7 @@ function rowHtml(ev){
 function setText(id,t){document.getElementById(id).textContent=t;}
 function setError(msg){const el=document.getElementById("error");el.style.display="block";el.textContent=msg;}
 
+/* ====== Fetch Calendar API with pagination ====== */
 async function fetchAll(params){
   let items=[],pageToken;
   do{
@@ -102,18 +123,24 @@ async function fetchAll(params){
   return items;
 }
 
+/* ====== Main ====== */
 (async function main(){
   try{
+    // Footer year
+    document.getElementById("year").textContent = new Date().getFullYear();
+
     const nowISO=new Date().toISOString();
 
     // Past
     const pastAll=await fetchAll({timeMax:nowISO,maxResults:2500});
     const pastWork=pastAll.filter(isWork).filter(ev=>evStart(ev)&&evEnd(ev)).sort((a,b)=>evStart(b)-evStart(a));
 
+    // Totals at top (days big, hours small)
     const totalHrs=pastWork.reduce((acc,ev)=>acc+durHours(ev),0);
-    setText("totalHours",`${totalHrs.toFixed(2)} hrs`);
-    setText("totalDays",`${(totalHrs/6).toFixed(2)} days @ 6 hrs/day`);
+    setText("totalDaysBig",`${(totalHrs/6).toFixed(2)} days`);
+    setText("totalHoursSub",`${totalHrs.toFixed(2)} hrs (6 hrs/day)`);
 
+    // Past render
     const pastEl=document.getElementById("past");
     pastEl.innerHTML=pastWork.length?"":`<div class="empty">No past sessions found.</div>`;
     for(const ev of pastWork){
@@ -124,11 +151,13 @@ async function fetchAll(params){
     const futureAll=await fetchAll({timeMin:nowISO,maxResults:2500});
     const futureWork=futureAll.filter(isWork).filter(ev=>evStart(ev)&&evEnd(ev)).sort((a,b)=>evStart(a)-evStart(b));
 
+    // Next 3
     const nextEl=document.getElementById("next");nextEl.innerHTML="";
     const next3=futureWork.slice(0,3);
     if(next3.length===0){nextEl.innerHTML=`<div class="empty">No upcoming sessions.</div>`;}
     else{for(const ev of next3){const row=document.createElement("div");row.className="row";row.innerHTML=rowHtml(ev);nextEl.appendChild(row);}}
 
+    // Toggle all future (text link)
     const toggleBtn=document.getElementById("toggleFuture");
     const futureCard=document.getElementById("futureCard");
     const futureList=document.getElementById("future");
@@ -136,11 +165,11 @@ async function fetchAll(params){
     toggleBtn.onclick=()=>{
       const show=futureCard.style.display==="none";
       futureCard.style.display=show?"block":"none";
-      toggleBtn.textContent=show?"Hide all future sessions":"Show all future sessions";
+      toggleBtn.textContent=show?"Hide future":"Show future";
       if(show){futureList.innerHTML="";for(const ev of futureWork){const row=document.createElement("div");row.className="row";row.innerHTML=rowHtml(ev);futureList.appendChild(row);}}};
   }catch(err){
-    console.error(err);setError(err.message||"Unknown error. Check API key and that Calendar API is enabled/public.");
-    setText("totalHours","Error");setText("totalDays","");
+    console.error(err);setError(err.message||"Unknown error.");
+    setText("totalDaysBig","Error");setText("totalHoursSub","");
     document.getElementById("past").innerHTML=`<div class="empty">—</div>`;
     document.getElementById("next").innerHTML=`<div class="empty">—</div>`;
   }
