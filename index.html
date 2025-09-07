@@ -6,174 +6,341 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="dark light">
 <style>
-  :root{
-    --bg:#000000;          /* deep black */
-    --panel:#0b0b0b;
-    --card:#111111;
-    --text:#f6f6f6;
-    --muted:#b8b8b8;
-    --border:#1e1e1e;
-    --accent:#ffd60a;      /* ANT61 yellow */
-    --accent-weak:#ffe566;
-    --pill:#0f0f0f;
-    --shadow:0 10px 30px rgba(0,0,0,.45);
-  }
+  :root{--bg:#000;--text:#f6f6f6;--muted:#d0d0d0;--accent:#ffd60a;--accent-weak:#ffe566}
   *{box-sizing:border-box}
-  html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
-  header{
-    background:
-      radial-gradient(1000px 260px at 10% -20%, rgba(255,214,10,.15), transparent 60%),
-      linear-gradient(180deg,var(--panel), var(--bg));
-    border-bottom:1px solid var(--border); padding:28px 16px; text-align:center;
-  }
-  .title{font-weight:900; letter-spacing:.3px; font-size:20px}
-  .totals{display:flex; gap:12px; align-items:center; justify-content:center; flex-direction:column; margin-top:10px}
-  .daysBig{font-size:44px; font-weight:900; color:var(--accent); text-shadow:0 0 12px rgba(255,214,10,.18)}
-  .hoursSub{color:var(--muted); font-weight:700}
-  .wrap{max-width:980px;margin:22px auto;padding:0 16px;display:grid;gap:16px}
-  .card{background:var(--card); border:1px solid var(--border); border-radius:16px; padding:16px; box-shadow:var(--shadow)}
-  h2{margin:0 0 10px 0; font-size:16px}
-  .list{display:grid; gap:10px}
-  .row{background:var(--pill); border:1px solid var(--border); border-radius:12px; padding:12px; display:flex; flex-direction:column}
-  .date{font-weight:800; font-size:14px; color:#fff}
-  .time{color:var(--accent-weak); font-size:12px}
-  .empty{color:var(--muted); font-style:italic}
-  .err{background:#2a0f14;border:1px solid #5b1f2a;color:#ffd6db;padding:10px;border-radius:10px}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;overflow-x:hidden}
+  #lava{position:fixed;inset:0;z-index:0;width:100%;height:100%;background:#000;display:block}
+  #fg{position:relative;z-index:1}
+
+  /* Boot loader overlay */
+  #boot{position:fixed;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;background:rgba(10,10,10,.85);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);opacity:1;transition:opacity .5s ease, visibility .5s ease;visibility:visible}
+  #boot._hide{opacity:0;visibility:hidden}
+  .bootWrap{display:flex;flex-direction:column;align-items:center;gap:16px}
+  .spinner{width:52px;height:52px;border-radius:50%;border:3px solid rgba(255,214,10,.25);border-top-color:var(--accent);animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .bootText{color:var(--muted);font-weight:700;letter-spacing:.2px}
+
+  /* Skeleton cards shown under spinner for nicer perceived loading */
+  .skCards{display:grid;gap:12px;width:min(680px,90vw)}
+  .skCard{border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,214,10,.12);padding:14px}
+  .skTitle{height:14px;width:160px;background:rgba(255,255,255,.08);border-radius:7px;margin-bottom:10px}
+  .skRow{display:grid;gap:8px}
+  .skLine{height:12px;background:rgba(255,255,255,.06);border-radius:6px}
+  .skLine.w40{width:40%}.skLine.w55{width:55%}.skLine.w70{width:70%}.skLine.w90{width:90%}
+  .skCard,.skLine,.skTitle{position:relative;overflow:hidden}
+  .skCard::after,.skLine::after,.skTitle::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.08),transparent);transform:translateX(-100%);animation:shimmer 1.4s ease-in-out infinite}
+  @keyframes shimmer{to{transform:translateX(100%)}}
+
+  /* Glass UI */
+  header{padding:28px 16px;text-align:center;background:rgba(20,20,20,.6);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-bottom:1px solid rgba(255,214,10,.2);opacity:0;transform:translateY(-10px);transition:opacity .6s ease,transform .6s ease}
+  .title{font-weight:900;letter-spacing:.3px;font-size:20px}
+  .totals{display:flex;flex-direction:column;align-items:center;margin-top:10px}
+  .daysBig{font-size:44px;font-weight:900;color:var(--accent);text-shadow:0 0 14px rgba(255,214,10,.45)}
+  .hoursSub{color:var(--muted);font-weight:700}
+  .wrap{max-width:900px;margin:22px auto;padding:0 16px;display:grid;gap:16px}
+  .card{background:rgba(20,20,20,.55);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border:1px solid rgba(255,214,10,.22);border-radius:16px;padding:16px;box-shadow:0 6px 20px rgba(0,0,0,.4);opacity:0;transform:translateY(10px);transition:opacity .6s ease,transform .6s ease,box-shadow .3s ease}
+  .card:hover{box-shadow:0 10px 26px rgba(0,0,0,.5)}
+  h2{margin:0 0 10px;font-size:16px}
+  .list{display:grid;gap:10px}
+  .row{background:rgba(15,15,15,.5);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);border:1px solid rgba(255,214,10,.12);border-radius:12px;padding:12px;opacity:0;transform:translateY(6px);transition:opacity .45s ease,transform .45s ease}
+  .row._in{opacity:1;transform:none}
+  .date{font-weight:800;font-size:14px}
+  .time{color:var(--accent-weak);font-size:12px}
+  .empty{color:var(--muted);font-style:italic}
   .actions{margin-top:8px}
-  .link{
-    background:transparent; border:none; padding:0; color:var(--accent);
-    font-weight:800; cursor:pointer; text-decoration:underline; text-underline-offset:3px;
-  }
+  .link{background:transparent;border:none;padding:0;color:var(--accent);font-weight:800;cursor:pointer;text-decoration:underline;text-underline-offset:3px;position:relative}
+  .link::after{content:"";position:absolute;left:0;right:100%;bottom:-2px;height:2px;background:var(--accent);transition:right .3s ease}
   .link:hover{color:#ffe36b}
-  footer{opacity:.7;text-align:center;margin:18px 0 10px; color:var(--muted)}
+  .link:hover::after{right:0}
+  footer{opacity:.7;text-align:center;margin:18px 0 10px;color:var(--muted)}
+
+  /* Reveal helpers */
+  ._in{opacity:1!important;transform:none!important}
+
+  /* Future card slide when shown via display:block */
+  #futureCard{opacity:0;transform:translateY(8px);transition:opacity .45s ease,transform .45s ease}
+  #futureCard._shown{opacity:1;transform:none}
 </style>
 </head>
 <body>
-<header>
-  <div class="title">ANT61 Work Log</div>
-  <div class="totals">
-    <div class="daysBig" id="totalDaysBig">0.00 days</div>
-    <div class="hoursSub" id="totalHoursSub">0.00 hrs (6 hrs/day)</div>
-  </div>
-</header>
 
-<div class="wrap">
-  <div id="error" class="err" style="display:none"></div>
+<canvas id="lava" aria-hidden="true"></canvas>
 
-  <div class="card">
-    <h2>Next 3 sessions</h2>
-    <div class="list" id="next"><div class="empty">Fetching…</div></div>
-    <div class="actions">
-      <button class="link" id="toggleFuture" disabled>Show future</button>
+<!-- Loader Overlay -->
+<div id="boot" aria-live="polite">
+  <div class="bootWrap">
+    <div class="spinner" aria-hidden="true"></div>
+    <div class="bootText">Fetching calendar…</div>
+    <div class="skCards" aria-hidden="true">
+      <div class="skCard">
+        <div class="skTitle"></div>
+        <div class="skRow">
+          <div class="skLine w70"></div>
+          <div class="skLine w55"></div>
+          <div class="skLine w40"></div>
+        </div>
+      </div>
+      <div class="skCard">
+        <div class="skTitle"></div>
+        <div class="skRow">
+          <div class="skLine w90"></div>
+          <div class="skLine w55"></div>
+        </div>
+      </div>
+      <div class="skCard">
+        <div class="skTitle"></div>
+        <div class="skRow">
+          <div class="skLine w70"></div>
+          <div class="skLine w40"></div>
+          <div class="skLine w55"></div>
+        </div>
+      </div>
     </div>
-  </div>
-
-  <div class="card" id="futureCard" style="display:none">
-    <h2>All future sessions</h2>
-    <div class="list" id="future"><div class="empty">No future sessions.</div></div>
-  </div>
-
-  <div class="card">
-    <h2>Past sessions (newest → oldest)</h2>
-    <div class="list" id="past"><div class="empty">Fetching…</div></div>
   </div>
 </div>
 
-<footer>© <span id="year"></span> Joshua Chan</footer>
+<div id="fg" aria-hidden="true">
+  <header id="_hdr">
+    <div class="title">ANT61 Work Log</div>
+    <div class="totals">
+      <div class="daysBig" id="totalDaysBig">0.00 days</div>
+      <div class="hoursSub" id="totalHoursSub">0.00 hrs (6 hrs/day)</div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="card">
+      <h2>Next 3 sessions</h2>
+      <div class="list" id="next"><div class="empty">Fetching…</div></div>
+      <div class="actions"><button class="link" id="toggleFuture" disabled>Show future</button></div>
+    </div>
+
+    <div class="card" id="futureCard" style="display:none">
+      <h2>All future sessions</h2>
+      <div class="list" id="future"><div class="empty">No future sessions.</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Past sessions (newest → oldest)</h2>
+      <div class="list" id="past"><div class="empty">Fetching…</div></div>
+    </div>
+  </div>
+
+  <footer>© <span id="year"></span> Joshua Chan</footer>
+</div>
 
 <script>
-/* ====== CONFIG ====== */
-const API_KEY = "AIzaSyARyKqEYg8ImmnLVwXKCWAJatSN2RROlwQ";
-const CAL_ID  = "aff5e1c22d61a3b0995590917f322322f031f87485955b05af7b8160db0f5370@group.calendar.google.com";
-const TIMEZONE = "Australia/Sydney";
+/* ==== Lava backdrop (unchanged visual style) ==== */
+(function(){
+  const c=document.getElementById('lava'),ctx=c.getContext('2d',{alpha:false});
+  let dpr=Math.max(1,window.devicePixelRatio||1),W=0,H=0,blobs=[];
+  function resize(){const w=window.innerWidth,h=window.innerHeight;W=w*dpr;H=h*dpr;c.width=W;c.height=H;c.style.width=w+'px';c.style.height=h+'px';ctx.setTransform(1,0,0,1,0,0);ctx.scale(dpr,dpr);}
+  window.addEventListener('resize',resize,{passive:true});resize();
 
-/* ====== Formatters ====== */
-const fmtDate = new Intl.DateTimeFormat("en-AU",{timeZone:TIMEZONE,weekday:"short",day:"2-digit",month:"short",year:"numeric"});
-const fmtTime = new Intl.DateTimeFormat("en-AU",{timeZone:TIMEZONE,hour:"2-digit",minute:"2-digit",hour12:false});
+  const N=5, DRAW_TOP=3;
+  function init(){
+    const maxLen=Math.max(window.innerWidth,window.innerHeight);
+    blobs=Array.from({length:N},()=>({
+      cx:Math.random()*window.innerWidth,
+      cy:Math.random()*window.innerHeight,
+      r:(maxLen*0.42)*(0.9+Math.random()*0.25),
+      theta:Math.random()*Math.PI*2,
+      omega:(Math.random()*0.01+0.003)*(Math.random()<0.5?-1:1),
+      phase:Math.random()*Math.PI*2,
+      fadeSpeed:0.12+Math.random()*0.10,
+      baseAlpha:0.14+Math.random()*0.06,
+      ax:120+Math.random()*220,
+      ay:90+Math.random()*190
+    }));
+  }
+  init();window.addEventListener('visibilitychange',()=>{if(!document.hidden)init();});
 
-/* ====== Helpers ====== */
-const isWork = ev => (ev.summary||"").trim().toLowerCase()==="work";
-const evStart = ev => ev.start?.dateTime ? new Date(ev.start.dateTime) : (ev.start?.date ? new Date(ev.start.date) : null);
-const evEnd   = ev => ev.end?.dateTime   ? new Date(ev.end.dateTime)   : (ev.end?.date   ? new Date(ev.end.date)   : null);
-function durHours(ev){const s=evStart(ev), e=evEnd(ev);if(!s||!e) return 0;if(ev.start?.date||ev.end?.date) return 0;return (e-s)/36e5;}
-function rowHtml(ev){
-  const s=evStart(ev), e=evEnd(ev);
-  const isAllDay=!!(ev.start?.date||ev.end?.date);
-  const d=s?fmtDate.format(s):"Unknown date";
-  const t=(!s||!e)?"—":isAllDay?"All day":`${fmtTime.format(s)} → ${fmtTime.format(e)}`;
-  return `<div class="date">${d}</div><div class="time">${t}</div>`;
-}
-function setText(id,t){document.getElementById(id).textContent=t;}
-function setError(msg){const el=document.getElementById("error");el.style.display="block";el.textContent=msg;}
-
-/* ====== Fetch Calendar API with pagination ====== */
-async function fetchAll(params){
-  let items=[],pageToken;
-  do{
-    const url=new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CAL_ID)}/events`);
-    const q=new URLSearchParams({key:API_KEY,singleEvents:"true",orderBy:"startTime",...params});
-    if(pageToken) q.set("pageToken",pageToken);
-    url.search=q.toString();
-    const res=await fetch(url.toString(),{cache:"no-store"});
-    const data=await res.json();
-    if(!res.ok){throw new Error(data?.error?.message||`HTTP ${res.status}`);}
-    if(Array.isArray(data.items)) items=items.concat(data.items);
-    pageToken=data.nextPageToken||null;
-  }while(pageToken);
-  return items;
-}
-
-/* ====== Main ====== */
-(async function main(){
-  try{
-    // Footer year
-    document.getElementById("year").textContent = new Date().getFullYear();
-
-    const nowISO=new Date().toISOString();
-
-    // Past
-    const pastAll=await fetchAll({timeMax:nowISO,maxResults:2500});
-    const pastWork=pastAll.filter(isWork).filter(ev=>evStart(ev)&&evEnd(ev)).sort((a,b)=>evStart(b)-evStart(a));
-
-    // Totals at top (days big, hours small)
-    const totalHrs=pastWork.reduce((acc,ev)=>acc+durHours(ev),0);
-    setText("totalDaysBig",`${(totalHrs/6).toFixed(2)} days`);
-    setText("totalHoursSub",`${totalHrs.toFixed(2)} hrs (6 hrs/day)`);
-
-    // Past render
-    const pastEl=document.getElementById("past");
-    pastEl.innerHTML=pastWork.length?"":`<div class="empty">No past sessions found.</div>`;
-    for(const ev of pastWork){
-      const row=document.createElement("div");row.className="row";row.innerHTML=rowHtml(ev);pastEl.appendChild(row);
+  let last=performance.now();
+  function loop(ts){
+    const dt=Math.min(0.05,(ts-last)/1000);last=ts;
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle='#000';ctx.fillRect(0,0,window.innerWidth,window.innerHeight);
+    const states=blobs.map(b=>{
+      b.theta+=b.omega*dt*60;
+      b.phase+=b.fadeSpeed*dt;
+      const fade=(Math.sin(b.phase)+1)/2;
+      const alpha=b.baseAlpha*fade;
+      const x=b.cx+b.ax*Math.cos(b.theta);
+      const y=b.cy+b.ay*Math.sin(b.theta);
+      return {x,y,r:b.r,alpha};
+    });
+    const idx=[...states.keys()].sort((i,j)=>states[j].alpha-states[i].alpha);
+    const strong=new Set(idx.slice(0,DRAW_TOP));
+    ctx.globalCompositeOperation='lighter';
+    for(let i=0;i<states.length;i++){
+      const s=states[i];
+      const a = strong.has(i) ? s.alpha : s.alpha*0.08;
+      if(a<=0.003) continue;
+      const g=ctx.createRadialGradient(s.x,s.y,0,s.x,s.y,s.r);
+      g.addColorStop(0,`rgba(255,214,10,${a})`);
+      g.addColorStop(0.55,`rgba(255,214,10,${a*0.5})`);
+      g.addColorStop(1,`rgba(255,214,10,0)`);
+      ctx.fillStyle=g;ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,Math.PI*2);ctx.fill();
     }
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+})();
 
-    // Future
-    const futureAll=await fetchAll({timeMin:nowISO,maxResults:2500});
-    const futureWork=futureAll.filter(isWork).filter(ev=>evStart(ev)&&evEnd(ev)).sort((a,b)=>evStart(a)-evStart(b));
+/* ===== Calendar logic (unchanged data rules; parallel fetching) ===== */
+const API_KEY="AIzaSyARyKqEYg8ImmnLVwXKCWAJatSN2RROlwQ";
+const CAL_ID="aff5e1c22d61a3b0995590917f322322f031f87485955b05af7b8160db0f5370@group.calendar.google.com";
+const TIMEZONE="Australia/Sydney";
+document.getElementById("year").textContent=new Date().getFullYear();
 
-    // Next 3
-    const nextEl=document.getElementById("next");nextEl.innerHTML="";
-    const next3=futureWork.slice(0,3);
-    if(next3.length===0){nextEl.innerHTML=`<div class="empty">No upcoming sessions.</div>`;}
-    else{for(const ev of next3){const row=document.createElement("div");row.className="row";row.innerHTML=rowHtml(ev);nextEl.appendChild(row);}}
+const fmtDate=new Intl.DateTimeFormat("en-AU",{timeZone:TIMEZONE,weekday:"short",day:"2-digit",month:"short",year:"numeric"});
+const fmtTime=new Intl.DateTimeFormat("en-AU",{timeZone:TIMEZONE,hour:"2-digit",minute:"2-digit",hour12:false});
+const isWork=ev=>(ev.summary||"").trim().toLowerCase()==="work";
+const evStart=ev=>ev.start?.dateTime?new Date(ev.start.dateTime):(ev.start?.date?new Date(ev.start.date):null);
+const evEnd=ev=>ev.end?.dateTime?new Date(ev.end.dateTime):(ev.end?.date?new Date(ev.end.date):null);
+function durHours(ev){const s=evStart(ev),e=evEnd(ev);if(!s||!e)return 0;if(ev.start?.date||ev.end?.date)return 0;return(e-s)/36e5;}
+function rowHtml(ev){const s=evStart(ev),e=evEnd(ev);const allDay=!!(ev.start?.date||ev.end?.date);const d=s?fmtDate.format(s):"Unknown date";const t=(!s||!e)?"—":allDay?"All day":`${fmtTime.format(s)} → ${fmtTime.format(e)}`;return `<div class="date">${d}</div><div class="time">${t}</div>`;}
+function setText(id,t){document.getElementById(id).textContent=t;}
+async function fetchAll(params){let items=[],pageToken;do{const url=new URL(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CAL_ID)}/events`);const q=new URLSearchParams({key:API_KEY,singleEvents:"true",orderBy:"startTime",...params});if(pageToken)q.set("pageToken",pageToken);url.search=q.toString();const res=await fetch(url.toString(),{cache:"no-store"});const data=await res.json();if(!res.ok)throw new Error(data?.error?.message||`HTTP ${res.status}`);if(Array.isArray(data.items))items=items.concat(data.items);pageToken=data.nextPageToken||null;}while(pageToken);return items;}
 
-    // Toggle all future (text link)
-    const toggleBtn=document.getElementById("toggleFuture");
-    const futureCard=document.getElementById("futureCard");
-    const futureList=document.getElementById("future");
-    toggleBtn.disabled=futureWork.length===0;
-    toggleBtn.onclick=()=>{
-      const show=futureCard.style.display==="none";
-      futureCard.style.display=show?"block":"none";
-      toggleBtn.textContent=show?"Hide future":"Show future";
-      if(show){futureList.innerHTML="";for(const ev of futureWork){const row=document.createElement("div");row.className="row";row.innerHTML=rowHtml(ev);futureList.appendChild(row);}}};
-  }catch(err){
-    console.error(err);setError(err.message||"Unknown error.");
-    setText("totalDaysBig","Error");setText("totalHoursSub","");
-    document.getElementById("past").innerHTML=`<div class="empty">—</div>`;
-    document.getElementById("next").innerHTML=`<div class="empty">—</div>`;
+/* ===== Placeholder-first UX: show overlay until data rendered, then reveal + animate ===== */
+(function(){
+  const boot=document.getElementById('boot');
+  const fg=document.getElementById('fg');
+  const nowISO=new Date().toISOString();
+
+  // Start both fetches in parallel immediately
+  const futureP=fetchAll({timeMin:nowISO,maxResults:2500});
+  const pastP  =fetchAll({timeMax:nowISO,maxResults:2500});
+
+  // When both are resolved, render and then hide loader + play animations
+  Promise.allSettled([futureP,pastP]).then(async([futureRes,pastRes])=>{
+    try{
+      // Safely unwrap results (empty arrays on failure)
+      const futureAll = futureRes.status==='fulfilled' ? futureRes.value : [];
+      const pastAll   = pastRes.status==='fulfilled'   ? pastRes.value   : [];
+
+      // --- FUTURE / NEXT 3 ---
+      const futureWork=futureAll.filter(isWork).filter(ev=>evStart(ev)&&evEnd(ev)).sort((a,b)=>evStart(a)-evStart(b));
+      const nextEl=document.getElementById('next');
+      nextEl.innerHTML="";
+      const next3=futureWork.slice(0,3);
+      if(next3.length===0){
+        nextEl.innerHTML=`<div class="empty">No upcoming sessions.</div>`;
+      }else{
+        next3.forEach((ev,i)=>{
+          const row=document.createElement('div');
+          row.className='row';
+          row.innerHTML=rowHtml(ev);
+          nextEl.appendChild(row);
+          setTimeout(()=>row.classList.add('_in'), i*70);
+        });
+      }
+
+      // Toggle future
+      const toggleBtn=document.getElementById("toggleFuture");
+      const futureCard=document.getElementById("futureCard");
+      const futureList=document.getElementById("future");
+      toggleBtn.disabled=futureWork.length===0;
+      toggleBtn.onclick=()=>{
+        const show=futureCard.style.display==="none";
+        futureCard.style.display=show?"block":"none";
+        toggleBtn.textContent=show?"Hide future":"Show future";
+        if(show){
+          futureList.innerHTML="";
+          futureWork.forEach((ev,i)=>{
+            const row=document.createElement('div');
+            row.className='row';
+            row.innerHTML=rowHtml(ev);
+            futureList.appendChild(row);
+            setTimeout(()=>row.classList.add('_in'), i*40);
+          });
+          requestAnimationFrame(()=>futureCard.classList.add('_shown'));
+        }else{
+          futureCard.classList.remove('_shown');
+        }
+      };
+
+      // --- PAST + TOTALS ---
+      const pastWork=pastAll.filter(isWork).filter(ev=>evStart(ev)&&evEnd(ev)).sort((a,b)=>evStart(b)-evStart(a));
+      const totalHrs=pastWork.reduce((a,ev)=>a+durHours(ev),0);
+      setText("totalDaysBig",`${(totalHrs/6).toFixed(2)} days`);
+      setText("totalHoursSub",`${totalHrs.toFixed(2)} hrs (6 hrs/day)`);
+
+      const pastEl=document.getElementById("past");
+      pastEl.innerHTML=pastWork.length?"":`<div class="empty">No past sessions found.</div>`;
+      pastWork.forEach((ev,i)=>{
+        const row=document.createElement("div");
+        row.className="row";
+        row.innerHTML=rowHtml(ev);
+        pastEl.appendChild(row);
+        setTimeout(()=>row.classList.add('_in'), i*20);
+      });
+
+    }catch(err){
+      console.error(err);
+      setText("totalDaysBig","Error");
+      setText("totalHoursSub","");
+      document.getElementById("past").innerHTML=`<div class="empty">—</div>`;
+      document.getElementById("next").innerHTML=`<div class="empty">—</div>`;
+    }finally{
+      // Reveal UI and play the entrance + number animations after render
+      fg.removeAttribute('aria-hidden');
+      hideBootThenReveal();
+      startTotalsCountUpEffects();
+    }
+  });
+
+  function hideBootThenReveal(){
+    const hdr=document.getElementById('_hdr');
+    const cards=[...document.querySelectorAll('.card')];
+    boot.classList.add('_hide');
+    setTimeout(()=>{
+      hdr.classList.add('_in');
+      cards.forEach((c,i)=>setTimeout(()=>c.classList.add('_in'), 120+i*90));
+    },320); // wait a beat so the overlay fades first
+  }
+
+  // Count-up animation bound to current totals text; suffix preserved
+  function startTotalsCountUpEffects(){
+    const easeOut=(t)=>1-Math.pow(1-t,3);
+    const daysEl=document.getElementById('totalDaysBig');
+    const hrsEl=document.getElementById('totalHoursSub');
+    let initialised=false;
+
+    // Run once after current text has been set
+    requestAnimationFrame(()=>{
+      const daysTarget=parseNum(daysEl.textContent);
+      const hrsTarget=parseNum(hrsEl.textContent);
+      const hrsSuffix=hrsEl.textContent.replace(/^[\d.]+\s*/,'').trim();
+      countTo(daysEl,0,daysTarget,v=>`${v.toFixed(2)} days`,1100);
+      countTo(hrsEl,0,hrsTarget ,v=>`${v.toFixed(2)} ${hrsSuffix}`,1100,()=>pulse([daysEl,hrsEl]));
+      initialised=true;
+    });
+
+    function parseNum(txt){const m=/([\d.]+)/.exec(txt||'');return m?parseFloat(m[1]):0;}
+    function countTo(el,from,to,fmt,ms,done){
+      const start=performance.now();
+      function tick(t){
+        const p=Math.min(1,(t-start)/ms);
+        const val=from+(to-from)*(1-Math.pow(1-p,3));
+        el.textContent=fmt(val);
+        if(p<1) requestAnimationFrame(tick); else done&&done();
+      }
+      requestAnimationFrame(tick);
+    }
+    function pulse(els){
+      els.forEach(el=>{
+        el.style.transition='transform .25s ease';
+        el.style.transform='scale(1.015)';
+        setTimeout(()=>{el.style.transform='none';},180);
+      });
+    }
   }
 })();
+
+/* ===== (no-op) keep footer year fresh ===== */
+document.getElementById("year").textContent=new Date().getFullYear();
 </script>
 </body>
 </html>
