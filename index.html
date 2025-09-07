@@ -7,19 +7,17 @@
 <meta name="color-scheme" content="light dark">
 <style>
   :root{
-    --bg:#0b0c10;--panel:#0f1118;--card:#12141a;--text:#e6eaf2;--muted:#9aa3b2;--border:#232838;
+    --bg:#0b0c10;--card:#12141a;--text:#e6eaf2;--muted:#9aa3b2;--border:#232838;
     --accent:#4c7dff;--pill:#0e1322;--shadow:0 10px 30px rgba(0,0,0,.35);
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
-  header{background:linear-gradient(180deg,#0f121a, #0b0c10);border-bottom:1px solid var(--border);padding:28px 16px;text-align:center}
-  .title{font-weight:900;letter-spacing:.3px;font-size:20px;opacity:.95}
+  header{background:linear-gradient(180deg,#0f121a,#0b0c10);border-bottom:1px solid var(--border);padding:28px 16px;text-align:center}
+  .title{font-weight:900;letter-spacing:.3px;font-size:20px}
   .totals{display:flex;gap:16px;align-items:baseline;justify-content:center;flex-wrap:wrap;margin-top:8px}
   .hours{font-size:40px;font-weight:900}
   .days{color:var(--muted);font-weight:700}
   .wrap{max-width:980px;margin:22px auto;padding:0 16px;display:grid;gap:16px}
-  .grid{display:grid;grid-template-columns:1fr;gap:16px}
-  @media(min-width:900px){.grid{grid-template-columns:1.2fr .8fr}}
   .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:var(--shadow)}
   h2{margin:0 0 10px 0;font-size:16px}
   .list{display:grid;gap:10px}
@@ -28,7 +26,6 @@
   .time{color:var(--muted);font-size:12px}
   .empty{color:var(--muted);font-style:italic}
   .err{background:#2a0f14;border:1px solid #5b1f2a;color:#ffd6db;padding:10px;border-radius:10px}
-  .actions{margin-top:10px}
   button{appearance:none;border:none;background:var(--accent);color:#fff;padding:10px 14px;border-radius:12px;cursor:pointer;font-weight:800}
   button.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
   footer{opacity:.7;text-align:center;margin:18px 0 10px}
@@ -46,18 +43,11 @@
 <div class="wrap">
   <div id="error" class="err" style="display:none"></div>
 
-  <div class="grid">
-    <div class="card">
-      <h2>Past sessions (newest → oldest)</h2>
-      <div class="list" id="past"><div class="empty">Fetching…</div></div>
-    </div>
-
-    <div class="card">
-      <h2>Next 3 sessions</h2>
-      <div class="list" id="next"><div class="empty">Fetching…</div></div>
-      <div class="actions">
-        <button class="ghost" id="toggleFuture" disabled>Show all future sessions</button>
-      </div>
+  <div class="card">
+    <h2>Next 3 sessions</h2>
+    <div class="list" id="next"><div class="empty">Fetching…</div></div>
+    <div class="actions">
+      <button class="ghost" id="toggleFuture" disabled>Show all future sessions</button>
     </div>
   </div>
 
@@ -65,21 +55,23 @@
     <h2>All future sessions</h2>
     <div class="list" id="future"><div class="empty">No future sessions.</div></div>
   </div>
+
+  <div class="card">
+    <h2>Past sessions (newest → oldest)</h2>
+    <div class="list" id="past"><div class="empty">Fetching…</div></div>
+  </div>
 </div>
 
-<footer>Public Google Calendar API (no login). Check API key & calendar visibility if nothing appears.</footer>
+<footer>Public Google Calendar API (no login). If nothing appears, check API key & calendar visibility.</footer>
 
 <script>
-/* ====== CONFIG ====== */
 const API_KEY = "AIzaSyARyKqEYg8ImmnLVwXKCWAJatSN2RROlwQ";
 const CAL_ID  = "aff5e1c22d61a3b0995590917f322322f031f87485955b05af7b8160db0f5370@group.calendar.google.com";
 const TIMEZONE = "Australia/Sydney";
 
-/* ====== Formatters ====== */
 const fmtDate = new Intl.DateTimeFormat("en-AU",{timeZone:TIMEZONE,weekday:"short",day:"2-digit",month:"short",year:"numeric"});
 const fmtTime = new Intl.DateTimeFormat("en-AU",{timeZone:TIMEZONE,hour:"2-digit",minute:"2-digit",hour12:false});
 
-/* ====== Helpers ====== */
 const isWork = ev => (ev.summary||"").trim().toLowerCase()==="work";
 const evStart = ev => ev.start?.dateTime ? new Date(ev.start.dateTime) : (ev.start?.date ? new Date(ev.start.date) : null);
 const evEnd   = ev => ev.end?.dateTime   ? new Date(ev.end.dateTime)   : (ev.end?.date   ? new Date(ev.end.date)   : null);
@@ -94,7 +86,6 @@ function rowHtml(ev){
 function setText(id,t){document.getElementById(id).textContent=t;}
 function setError(msg){const el=document.getElementById("error");el.style.display="block";el.textContent=msg;}
 
-/* ====== Fetch Calendar API with pagination ====== */
 async function fetchAll(params){
   let items=[],pageToken;
   do{
@@ -111,7 +102,6 @@ async function fetchAll(params){
   return items;
 }
 
-/* ====== Main ====== */
 (async function main(){
   try{
     const nowISO=new Date().toISOString();
@@ -119,9 +109,11 @@ async function fetchAll(params){
     // Past
     const pastAll=await fetchAll({timeMax:nowISO,maxResults:2500});
     const pastWork=pastAll.filter(isWork).filter(ev=>evStart(ev)&&evEnd(ev)).sort((a,b)=>evStart(b)-evStart(a));
+
     const totalHrs=pastWork.reduce((acc,ev)=>acc+durHours(ev),0);
     setText("totalHours",`${totalHrs.toFixed(2)} hrs`);
     setText("totalDays",`${(totalHrs/6).toFixed(2)} days @ 6 hrs/day`);
+
     const pastEl=document.getElementById("past");
     pastEl.innerHTML=pastWork.length?"":`<div class="empty">No past sessions found.</div>`;
     for(const ev of pastWork){
@@ -131,12 +123,12 @@ async function fetchAll(params){
     // Future
     const futureAll=await fetchAll({timeMin:nowISO,maxResults:2500});
     const futureWork=futureAll.filter(isWork).filter(ev=>evStart(ev)&&evEnd(ev)).sort((a,b)=>evStart(a)-evStart(b));
+
     const nextEl=document.getElementById("next");nextEl.innerHTML="";
     const next3=futureWork.slice(0,3);
     if(next3.length===0){nextEl.innerHTML=`<div class="empty">No upcoming sessions.</div>`;}
     else{for(const ev of next3){const row=document.createElement("div");row.className="row";row.innerHTML=rowHtml(ev);nextEl.appendChild(row);}}
 
-    // Toggle all future
     const toggleBtn=document.getElementById("toggleFuture");
     const futureCard=document.getElementById("futureCard");
     const futureList=document.getElementById("future");
