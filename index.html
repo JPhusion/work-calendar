@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ANT61 Work Log (Public ICS)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<style>
+  :root{
+    --bg:#0b0c10;--card:#12141a;--muted:#8892a6;--text:#e6eaf2;--border:#232838;--accent:#1a5fff;--pill:#0e1322;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial}
+  header{padding:24px 16px;text-align:center;background:#0f1118;border-bottom:1px solid var(--border)}
+  .title{font-weight:900;font-size:20px;letter-spacing:.2px}
+  .stats{font-size:32px;font-weight:900;margin-top:8px}
+  .sub{color:var(--muted)}
+  .wrap{max-width:900px;margin:22px auto;padding:0 16px;display:grid;gap:16px}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px}
+  h2{margin:0 0 10px 0;font-size:16px}
+  .list{display:grid;gap:8px}
+  .row{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;background:var(--pill)}
+  .when{font-weight:700}
+  .meta{color:var(--muted);font-size:12px}
+  .empty{color:var(--muted);font-style:italic}
+  .chips{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:8px}
+  .chip{border:1px solid var(--border);background:#0f1424;color:#cfe3ff;padding:6px 10px;border-radius:999px;font-weight:700}
+  .actions{display:flex;gap:10px;flex-wrap:wrap}
+  button{appearance:none;border:none;background:var(--accent);color:#fff;padding:10px 14px;border-radius:12px;cursor:pointer;font-weight:800}
+  button.ghost{background:transparent;border:1px solid var(--border);color:var(--text)}
+  .err{background:#2a0f14;border:1px solid #5b1f2a;color:#ffd6db;padding:10px;border-radius:10px}
+  footer{opacity:.7;text-align:center;margin:18px 0 10px}
+  a{color:#a6e1fa;text-decoration:none}
+</style>
+</head>
+<body>
+<header>
+  <div class="title">ANT61 Work Log</div>
+  <div class="stats" id="totalHours">Loading…</div>
+  <div class="sub" id="totalDays"></div>
+  <div class="chips">
+    <span class="chip">Events named: <b>work</b></span>
+    <span class="chip">Timezone: Australia/Sydney</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="error" class="err" style="display:none"></div>
+
+  <div class="card">
+    <h2>Past sessions (newest → oldest)</h2>
+    <div class="list" id="past"><div class="empty">Fetching…</div></div>
+  </div>
+
+  <div class="card">
+    <h2>Next 3 sessions</h2>
+    <div class="list" id="next"><div class="empty">Fetching…</div></div>
+    <div class="actions" style="margin-top:10px">
+      <button class="ghost" id="toggleFuture" disabled>Show all future sessions</button>
+    </div>
+  </div>
+
+  <div class="card" id="futureCard" style="display:none">
+    <h2>All future sessions</h2>
+    <div class="list" id="future"><div class="empty">No future sessions.</div></div>
+  </div>
+</div>
+
+<footer>Using public ICS via a CORS proxy. If it ever rate-limits, refresh or try again later.</footer>
+
+<script>
+/* ====== CONFIG ====== */
+const ICS_URL =
+  "https://calendar.google.com/calendar/ical/aff5e1c22d61a3b0995590917f322322f031f87485955b05af7b8160db0f5370%40group.calendar.google.com/public/basic.ics";
+
+// CORS proxy for static pages (works on GitHub Pages and local). r.jina.ai expects target as HTTP.
+const PROXY = "https://r.jina.ai/http://"; // keep the trailing slash
+const TIMEZONE = "Australia/Sydney";
+
+/* ====== Formatting ====== */
+const fmtDate = new Intl.DateTimeFormat("en-AU", { timeZone: TIMEZONE, weekday:"short", day:"2-digit", month:"short", year:"numeric" });
+const fmtTime = new Intl.DateTimeFormat("en-AU", { timeZone: TIMEZONE, hour:"2-digit", minute:"2-digit", hour12:false });
+
+/* ====== Minimal ICS Parser (VEVENT only) ====== */
+function unfoldIcs(text){
+  // RFC 5545: lines starting with space/tab are continuations of previous line
+  return text.replace(/\r?\n[ \t]/g, "");
+}
+function splitEvents(ics){
+  const out=[]; let cur=null;
+  for(const line of ics.split(/\r?\n/)){
+    if(line==="BEGIN:VEVENT"){ cur=[]; }
+    else if(line==="END:VEVENT"){ if(cur) out.push(cur.join("\n")); cur=null; }
+    else if(cur){ cur.push(line); }
+  }
+  return out;
+}
+function parseProps(block){
+  const props={};
+  for(const raw of block.split("\n")){
+    const i = raw.indexOf(":"); if(i<0) continue;
+    const head = raw.slice(0,i);
+    const value = raw.slice(i+1);
+    const [name, ...paramParts] = head.split(";");
+    const params = Object.fromEntries(paramParts.map(p=>{
+      const j=p.indexOf("="); return j>0?[p.slice(0,j).toUpperCase(), p.slice(j+1)]:[p.toUpperCase(), true];
+    }));
+    const key = name.toUpperCase();
+    if(!(key in props)) props[key] = { value, params };
+  }
+  return props;
+}
+function parseIcsDate(val, params){
+  // VALUE=DATE → all-day (yyyyMMdd)
+  if(params && params.VALUE==="DATE"){
+    const y=+val.slice(0,4), m=+val.slice(4,6)-1, d=+val.slice(6,8);
+    return new Date(Date.UTC(y,m,d));
+  }
+  // With trailing Z → UTC
+  if(/Z$/.test(val)) return new Date(val);
+  // Local naive time → parse as local; good enough for public basic.ics
+  return new Date(val.replace(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})$/, "$1-$2-$3T$4:$5:$6"));
+}
+function parseEvent(block){
+  const p = parseProps(block);
+  const summary = (p.SUMMARY?.value || "").trim();
+  const start = p.DTSTART ? parseIcsDate(p.DTSTART.value, p.DTSTART.params) : null;
+  const end   = p.DTEND   ? parseIcsDate(p.DTEND.value,   p.DTEND.params)   : null;
+  const allDay = (p.DTSTART?.params?.VALUE === "DATE") || (p.DTEND?.params?.VALUE === "DATE");
+  return { summary, start, end, allDay };
+}
+
+/* ====== Helpers ====== */
+const isWork = ev => (ev.summary||"").toLowerCase() === "work";
+const now = () => new Date();
+function durHours(ev){
+  if(!ev.start || !ev.end) return 0;
+  if(ev.allDay) return 0; // do not count all-day in totals
+  return (ev.end - ev.start)/36e5;
+}
+function line(ev){
+  if(!ev.start || !ev.end){
+    return `<span class="when">Working</span> <span class="meta">time missing</span>`;
+  }
+  if(ev.allDay){
+    return `<span class="when">Working</span> <span class="meta">All-day · ${fmtDate.format(ev.start)}</span>`;
+  }
+  return `<span class="when">Working</span> <span class="meta">${fmtTime.format(ev.start)} → ${fmtTime.format(ev.end)} · ${fmtDate.format(ev.start)}</span>`;
+}
+function setText(id, text){ document.getElementById(id).textContent = text; }
+function setError(msg){
+  const el = document.getElementById("error");
+  el.style.display = "block"; el.textContent = msg;
+}
+
+/* ====== Main ====== */
+(async function main(){
+  try{
+    // r.jina.ai requires the target as HTTP (not HTTPS)
+    const target = ICS_URL.replace(/^https:\/\//, "http://");
+    const url = PROXY + target;
+
+    const res = await fetch(url, { cache:"no-store" });
+    if(!res.ok){
+      throw new Error(`Fetch failed (${res.status}). Check that the calendar is public and the proxy is reachable.`);
+    }
+    const raw = await res.text();
+    const ics = unfoldIcs(raw);
+
+    const events = splitEvents(ics).map(parseEvent)
+      .filter(isWork)
+      .filter(ev => ev.start && ev.end); // need times
+
+    const nowDt = now();
+    const past = events.filter(ev => ev.end < nowDt).sort((a,b)=> b.start - a.start);
+    const future = events.filter(ev => ev.start >= nowDt).sort((a,b)=> a.start - b.start);
+
+    // Totals
+    const totalHrs = past.reduce((acc,ev)=> acc + durHours(ev), 0);
+    setText("totalHours", `${totalHrs.toFixed(2)} hrs`);
+    setText("totalDays", `${(totalHrs/6).toFixed(2)} days @ 6 hrs/day`);
+
+    // Past list
+    const pastEl = document.getElementById("past");
+    pastEl.innerHTML = past.length ? "" : `<div class="empty">No past sessions found.</div>`;
+    for(const ev of past){
+      const row = document.createElement("div");
+      row.className="row";
+      row.innerHTML = line(ev);
+      pastEl.appendChild(row);
+    }
+
+    // Next 3
+    const nextEl = document.getElementById("next");
+    nextEl.innerHTML = "";
+    const next3 = future.slice(0,3);
+    if(next3.length===0){ nextEl.innerHTML = `<div class="empty">No upcoming sessions.</div>`; }
+    else{
+      for(const ev of next3){
+        const row = document.createElement("div");
+        row.className="row";
+        row.innerHTML = line(ev);
+        nextEl.appendChild(row);
+      }
+    }
+
+    // Future toggle
+    const toggleBtn = document.getElementById("toggleFuture");
+    const futureCard = document.getElementById("futureCard");
+    const futureList = document.getElementById("future");
+    toggleBtn.disabled = future.length===0;
+    toggleBtn.onclick = ()=>{
+      const show = futureCard.style.display==="none";
+      futureCard.style.display = show ? "block" : "none";
+      toggleBtn.textContent = show ? "Hide all future sessions" : "Show all future sessions";
+      if(show){
+        futureList.innerHTML = "";
+        for(const ev of future){
+          const row = document.createElement("div");
+          row.className="row";
+          row.innerHTML = line(ev);
+          futureList.appendChild(row);
+        }
+      }
+    };
+
+  }catch(err){
+    console.error(err);
+    setError(err.message || "Unknown error. Try refreshing, or check calendar visibility.");
+    setText("totalHours","Error"); setText("totalDays","");
+    document.getElementById("past").innerHTML = `<div class="empty">—</div>`;
+    document.getElementById("next").innerHTML = `<div class="empty">—</div>`;
+  }
+})();
+</script>
+</body>
+</html>
